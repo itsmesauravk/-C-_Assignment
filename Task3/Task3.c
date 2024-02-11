@@ -1,172 +1,193 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <pthread.h>
+#include<stdio.h>
+#include<stdlib.h>
+#include<stdbool.h>
+#include<pthread.h>
 
-// Declaring file pointers for five files
-FILE *fptr1, *fptr2, *fptr3, *fptr4, *fptr5;
+int Prime = 0;  // Global variable to store the count of prime numbers
 
-// Global variable to store the count of prime numbers
-int count = 0;
+// Structure to hold input data for each thread
+typedef struct {
+    int initialPosition;
+    int finalPosition;
+    FILE *fp;
+    int *arr;
+} Input;
 
-// Structure to store the start and finish index of the range to be processed by each thread
-struct thread{
-	int start;
-	int finish;
-} args;
+pthread_mutex_t mx;  // Mutex for thread synchronization
 
-// Function to check if the number is prime or not
-void primeFunction(int primeNum){
-	int i;
-	int boolean = 0;
-	
-	// If the number is less than 2, it is not a prime number
-	if(primeNum < 2){
-		boolean = 1;
-	}
-
-	// Loop through all the numbers less than the given number
-	for(i = 2; i < primeNum; i++){
-		// If the number is divisible by any number in the range, it is not a prime number
-		if(primeNum % i == 0){
-			boolean = 1;
-			break;
-		}
-	}
-
-	// If the number is not divisible by any number in the range, it is a prime number
-	if(boolean == 0){
-		// Writing the prime number to the file pointed by fptr5
-		fprintf(fptr5, "%d\n", primeNum);
-		// Incrementing the count of prime numbers
-		count++;
-	}
-	
+// Function to check if a number is prime
+bool isPrime(int value) {
+    int i;
+    for (i = 2; i < (value / 2); i++) {
+        if (value % i == 0) {
+            return false;
+        }
+    }
+    return true;
 }
 
-// Thread function that will be called by pthread_create function
-void *threadFunction(void *p){
-	int start;
-	int finish;
-	int i, num;
-	
-	// Casting the void pointer to struct thread pointer
-	struct thread *targs = (struct thread*)p;
+// Thread function to find prime numbers in a given range
+void *POSIX(void *p) {
+    Input *mark = (Input *)p;
+    FILE *file = mark->fp;
+    int i;
+    bool test;
 
-	// Assigning the start and finish values from the structure to local variables
-	start = targs->start;
-	finish = targs->finish;
+    pthread_mutex_lock(&mx);  // Lock mutex to avoid data race
 
-	// Loop through the range assigned to the thread
-	for(i = start; i<finish; i++){
-		// Reading a number from the file pointed by fptr4
-		fscanf(fptr4, "%d", &num);
-		// Checking if the number is prime or not
-		primeFunction(num);
-	
-	}
-	// Exiting the thread
-	pthread_exit(0);
+    // Iterate over the specified range and check for prime numbers
+    for (i = mark->initialPosition; i <= mark->finalPosition; i++) {
+        test = isPrime(mark->arr[i]);
+        if (test == true) {
+            fprintf(file, "%d\n", mark->arr[i]);  // Write prime number to file
+            Prime += 1;
+        }
+    }
+
+    pthread_mutex_unlock(&mx);  // Unlock mutex after finishing the calculation
+
+    pthread_exit(0);
 }
 
-int main(){
-	int num, i;
-	int row = 0;
-	int threadNum;
-	
-	// Taking the number of threads as input from the user
-	printf("Enter the number of threads: ");
-	scanf("%d", &threadNum);
-	
-	// Array to store the range of numbers assigned to each thread
-	int chunks[threadNum];
-	
-	// Allocating memory for the structure to store the range of numbers
-	struct thread *targs = malloc(threadNum * sizeof(struct thread));
+// Main function
+int main() {
 
-	// Array to store the thread IDs
-	pthread_t thread[threadNum];
+    FILE *fp1, *fp2, *fp3, *fp4;
+    int totalNumber = 0;
+    int n, a, i, x;
 
-	// Opening the  file in read mode
-	fptr1 = fopen("PrimeData1.txt", "r");
-	fptr2 = fopen("PrimeData2.txt", "r");
-	fptr3 = fopen("PrimeData3.txt", "r");
-	// Opening the file in write mode
-	fptr4 = fopen("AllNumbers.txt", "w");
+    // Opening files in read mode
+    fp1 = fopen("PrimeData1.txt", "r");
+    fp2 = fopen("PrimeData2.txt", "r");
+    fp3 = fopen("PrimeData3.txt", "r");
 
-	//reading from file pointer
-	while(fscanf(fptr1, "%d", &num) != EOF){
-		row++;
-	}
-	while(fscanf(fptr2, "%d", &num) != EOF){
-		row++;
-	}
-	while(fscanf(fptr3, "%d", &num) != EOF){
-		row++;
-	}
+    // Check if files are opened successfully
+    if (fp1 == NULL || fp2 == NULL || fp3 == NULL) {
+        printf("Failed to open file!\n");
+        return 0;
+    }
 
-	int rem = row % threadNum;
+    // Counting the total number of lines in the files
+    while ((a = fgetc(fp1)) != EOF) {
+        if (a == '\n') {
+            totalNumber++;
+        }
+    }
 
-	fclose(fptr1);
-	fclose(fptr2);
-	fclose(fptr3);
+    while ((a = fgetc(fp2)) != EOF) {
+        if (a == '\n') {
+            totalNumber++;
+        }
+    }
 
-	fptr1 = fopen("PrimeData1.txt", "r");
-	fptr2 = fopen("PrimeData2.txt", "r");
-	fptr3 = fopen("PrimeData3.txt", "r");
-	fptr5 = fopen("PrimeNumbers.txt", "w");
+    while ((a = fgetc(fp3)) != EOF) {
+        if (a == '\n') {
+            totalNumber++;
+        }
+    }
 
-	//Slicing to each threads
-	for(i = 0; i < threadNum; i++){
-		chunks[i] = row / threadNum;
-	}
+    // Setting file pointers to the beginning of the files
+    fseek(fp1, 0, SEEK_SET);
+    fseek(fp2, 0, SEEK_SET);
+    fseek(fp3, 0, SEEK_SET);
 
-	for(i = 0; i < rem; i++){
-		chunks[i] = chunks[i] + 1;
-	}
-	
-	for(i = 0; i < threadNum; i++){
-		if(i == 0){
-			targs[i].start = 0;
-		}else{
-			targs[i].start = targs[i-1].finish + 1;
-		}
-		targs[i].finish = targs[i].start + chunks[i] - 1;
-	}
-	
-	//Reading from FILE pointer and printing on new pointer file
-	while(fscanf(fptr1, "%d", &num) != EOF){
-		fprintf(fptr4, "%d\n", num);
-	}
-	while(fscanf(fptr2, "%d", &num) != EOF){
-		fprintf(fptr4, "%d\n", num);
-	}
-	while(fscanf(fptr3, "%d", &num) != EOF){
-		fprintf(fptr4, "%d\n", num);
-	}
-	
-	fclose(fptr1);
-	fclose(fptr2);
-	fclose(fptr3);
-	
-	fptr4 = fopen("AllNumbers.txt", "r");
-	
-	for(i = 0; i < threadNum; i++){
-		pthread_create(&thread[i], NULL, threadFunction, &targs[i]);
-	}
-	for(i = 0; i < threadNum; i++){
-		pthread_join(thread[i], NULL);
-	}
-	
-	fprintf(fptr5, "The total Prime numbers are:\n %d\n", count);
-	printf("The total Prime numbers are:\n %d\n", count);
-	
-	fclose(fptr4);
-	fclose(fptr5);
-	
-	free(targs);
-	return 0;
+    // Creating a temporary array to store numbers from the files
+    int *temp = malloc(totalNumber * sizeof(int));
+    i = 0;
 
-	
+    // Reading numbers from the first file and storing them in the array
+    while (fscanf(fp1, "%d", &x) != EOF) {
+        temp[i] = x;
+        i = i + 1;
+    }
+
+    // Reading numbers from the second file and storing them in the array
+    while (fscanf(fp2, "%d", &x) != EOF) {
+        temp[i] = x;
+        i = i + 1;
+    }
+
+    // Reading numbers from the third file and storing them in the array
+    while (fscanf(fp3, "%d", &x) != EOF) {
+        temp[i] = x;
+        i = i + 1;
+    }
+
+    // Printing the total number of numbers in the files
+    printf("Total Count = %d\n", totalNumber);
+
+    // Asking the user to input the number of threads
+    printf("Enter the thread number: ");
+    scanf("%d", &n);
+
+    // Creating an array to store the number of elements in each thread
+    int *list = malloc(n * sizeof(int));
+    for (i = 0; i < n; i++) {
+        list[i] = (totalNumber / n);
+    }
+
+    // Adding the remaining elements to the first few threads
+    for (i = 0; i < (totalNumber % n); i++) {
+        list[i] = list[i] + 1;
+    }
+
+    // Creating an array to store the starting and ending positions of each thread
+    int *list_start = malloc(n * sizeof(int));
+    int *list_end = malloc(n * sizeof(int));
+
+    // Calculating the starting and ending positions of each thread
+    for (i = 0; i < n; i++) {
+        if (i == 0) {
+            list_start[i] = 0;
+        } else {
+            list_start[i] = list_end[i - 1] + 1;
+        }
+        list_end[i] = list_start[i] + list[i] - 1;
+    }
+
+    // Opening a file to write the prime numbers
+    fp4 = fopen("PrimeNumbers.txt", "w");
+
+    // Creating an array of structures to store the starting and ending positions of each thread
+    Input *th_pos = malloc(n * sizeof(Input));
+    for (i = 0; i < n; i++) {
+        th_pos[i].initialPosition = list_start[i];
+        th_pos[i].finalPosition = list_end[i];
+        th_pos[i].fp = fp4;
+        th_pos[i].arr = temp;
+    }
+
+    pthread_mutex_init(&mx, NULL);  // Initialize mutex for synchronization
+
+    // Creating an array of threads
+    pthread_t *th = malloc(n * sizeof(pthread_t));
+
+    // Creating the threads
+    for (i = 0; i < n; i++) {
+        pthread_create(&th[i], NULL, POSIX, &th_pos[i]);
+    }
+
+    // Waiting for all threads to finish
+    for (i = 0; i < n; i++) {
+        pthread_join(th[i], NULL);
+    }
+
+    pthread_mutex_destroy(&mx);  // Destroy mutex after usage
+
+    // Printing the total count of prime numbers
+    printf("Total prime numbers: %d\n", Prime);
+
+    // Freeing allocated memory
+    free(list);
+    free(list_start);
+    free(list_end);
+    free(th_pos);
+    free(th);
+    free(temp);
+    fclose(fp1);
+    fclose(fp2);
+    fclose(fp3);
+    fclose(fp4);
+
+    return 0;
 }
-
-
